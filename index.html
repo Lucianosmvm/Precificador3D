@@ -454,26 +454,21 @@ html, body { max-width: 100%; overflow-x: hidden; }
       <div class="section">
         <div class="section-header">
           <div class="step-badge s1">1</div>
-          <span class="section-title">Filamento</span>
+          <span class="section-title">Filamentos</span>
         </div>
-        <div class="grid-3">
-          <div class="field">
-            <label>Filamento usado</label>
-            <select id="c-filament" onchange="calc()">
-              <option value="">— nenhum —</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Peso usado (g)</label>
-            <input type="number" id="c-peso" value="20" min="0" step="0.1" oninput="calc()">
-          </div>
-          <div class="field">
-            <label>Desperdício (%)</label>
-            <input type="number" id="c-desperdicio" value="5" min="0" max="100" step="1" oninput="calc()">
+
+        <div id="fil-lines"></div>
+
+        <div style="display:flex;align-items:flex-end;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="addFilLine()">+ Adicionar filamento</button>
+          <div class="field" style="width:160px">
+            <label>Desperdício global (%)</label>
+            <input type="number" id="c-desperdicio-global" value="5" min="0" max="100" step="1" oninput="calc()">
           </div>
         </div>
+
         <div id="filament-warning" style="display:none;margin-top:8px;padding:7px 10px;background:var(--amber-light);border-radius:var(--radius);font-size:13px;color:var(--amber);">
-          ⚠️ Estoque insuficiente para este modelo. O desconto só ocorre ao clicar em "Imprimir".
+          ⚠️ Estoque insuficiente em um ou mais filamentos. O desconto só ocorre ao clicar em "Imprimir".
         </div>
         <div class="section-result"><span>Custo filamento:</span><strong id="r1">R$ 0,00</strong></div>
       </div>
@@ -821,22 +816,23 @@ const fmtN = (v,d=2) => v.toLocaleString('pt-BR',{minimumFractionDigits:d,maximu
 let lastCalc = {};
 
 function calc() {
-  const peso = g('c-peso'), desp = g('c-desperdicio');
   const watts = g('c-watts'), horas = g('c-horas'), tarifa = g('c-tarifa');
   const min = g('c-minutos'), vh = g('c-valorHora');
   const vi = g('c-impressora'), vu = g('c-vidaUtil'), man = g('c-manutencao');
   const emb = g('c-embalagem'), taxaMkt = g('c-taxaMkt'), outros = g('c-outros');
   const margem = g('c-margem');
-  const filId = document.getElementById('c-filament').value;
-
-  // Filament cost
-  let pricePerKg = 100;
-  if(filId) {
-    const f = filaments.find(x=>x.id==filId);
-    if(f) pricePerKg = f.precoKg;
-  }
-  const pesoComDesp = peso * (1 + desp/100);
-  const r1 = (pesoComDesp / 1000) * pricePerKg;
+  // Filament cost (multi)
+  let r1 = 0;
+  let hasStockWarning = false;
+  const desp = g('c-desperdicio-global');
+  filLines.forEach(line => {
+    const f = line.filId ? filaments.find(x=>x.id==line.filId) : null;
+    const pricePerKg = f ? f.precoKg : 100;
+    const pesoComDesp = line.peso * (1 + desp/100);
+    r1 += (pesoComDesp / 1000) * pricePerKg;
+    if(f && f.restante < pesoComDesp) hasStockWarning = true;
+  });
+  const totalPesoComDesp = filLines.reduce((a,l) => a + l.peso * (1 + desp/100), 0);
 
   // Energy
   const kwh = (watts / 1000) * horas;
@@ -863,14 +859,7 @@ function calc() {
   const lucroLiq = preco - custoTotal;
   const margemReal = preco > 0 ? (lucroLiq / preco) * 100 : 0;
 
-  // Stock warning
-  if(filId) {
-    const f = filaments.find(x=>x.id==filId);
-    const warn = f && f.restante < pesoComDesp;
-    document.getElementById('filament-warning').style.display = warn ? 'block' : 'none';
-  } else {
-    document.getElementById('filament-warning').style.display = 'none';
-  }
+  document.getElementById('filament-warning').style.display = hasStockWarning ? 'block' : 'none';
 
   // Update UI
   ['r1','r2','r3','r4'].forEach((id,i)=>{
@@ -887,7 +876,7 @@ function calc() {
   document.getElementById('m-lucro').textContent = fmt(lucroLiq);
   document.getElementById('m-margem').textContent = fmtN(margemReal,1) + '%';
 
-  lastCalc = { r1, r2, r3, r4, r5base, r6, custoTotal, preco, lucroLiq, margemReal, pesoComDesp, horas };
+  lastCalc = { r1, r2, r3, r4, r5base, r6, custoTotal, preco, lucroLiq, margemReal, pesoComDesp: totalPesoComDesp, horas };
 }
 
 // ═══ SAVE PRODUCT ═══
@@ -896,18 +885,35 @@ function saveProduct() {
   if(!nome) { alert('Digite um nome para o modelo.'); return; }
   const emoji = document.getElementById('c-emoji').value.trim() || '🖨️';
   const link = document.getElementById('c-link').value.trim();
-  const filId = document.getElementById('c-filament').value;
   const qtd = parseInt(g('c-qtd')) || 1;
-  const fil = filId ? filaments.find(x=>x.id==filId) : null;
-  const pesoUsado = lastCalc.pesoComDesp * qtd;
+  const desp = g('c-desperdicio-global');
+
+  // Build filaments snapshot
+  const filsUsados = filLines.map(line => {
+    const f = line.filId ? filaments.find(x=>x.id==line.filId) : null;
+    return {
+      filamentoId: line.filId || null,
+      filamentoNome: f ? `${f.material} ${f.nome}` : '—',
+      filamentoColor: f ? f.color : '#95A5A6',
+      peso: line.peso * (1 + desp/100) * qtd,
+    };
+  }).filter(l => l.peso > 0);
+
+  const pesoTotal = filsUsados.reduce((a,l) => a+l.peso, 0);
+
+  // Build display label
+  const filLabel = filsUsados.length === 0 ? '—'
+    : filsUsados.length === 1 ? filsUsados[0].filamentoNome
+    : `${filsUsados.length} filamentos`;
+  const filColor = filsUsados.length === 1 ? filsUsados[0].filamentoColor : '#9B59B6';
 
   const product = {
     id: Date.now(),
     nome, emoji,
-    filamentoId: filId || null,
-    filamentoNome: fil ? `${fil.material} ${fil.nome}` : '—',
-    filamentoColor: fil ? fil.color : '#95A5A6',
-    pesoUsado: pesoUsado,
+    filamentos: filsUsados,
+    filamentoNome: filLabel,
+    filamentoColor: filColor,
+    pesoUsado: pesoTotal,
     custoTotal: lastCalc.custoTotal * qtd,
     preco: lastCalc.preco,
     lucroLiq: lastCalc.lucroLiq * qtd,
@@ -997,22 +1003,26 @@ function markPrinted(id) {
   const p = products.find(x=>x.id===id);
   if(!p || p.impresso) return;
 
-  const fil = p.filamentoId ? filaments.find(x=>x.id==p.filamentoId) : null;
-  const pesoUsado = p.pesoUsado || 0;
-
+  const fils = p.filamentos && p.filamentos.length > 0 ? p.filamentos : [];
   let msg = `Confirmar impressão de "${p.nome}"?`;
-  if(fil) {
-    msg += `\n\n${pesoUsado.toFixed(1)}g serão descontados do estoque de ${fil.material} ${fil.nome} (${fil.restante.toFixed(0)}g restantes).`;
-    if(fil.restante < pesoUsado) msg += `\n\n⚠️ Estoque insuficiente! O saldo ficará negativo.`;
+  if(fils.length > 0) {
+    msg += '\n\nSerão descontados do estoque:';
+    fils.forEach(l => {
+      const f = l.filamentoId ? filaments.find(x=>x.id==l.filamentoId) : null;
+      msg += `\n• ${l.filamentoNome}: ${l.peso.toFixed(1)}g`;
+      if(f) { msg += ` (${f.restante.toFixed(0)}g restantes)`; if(f.restante < l.peso) msg += ' ⚠️ insuficiente'; }
+    });
   }
   if(!confirm(msg)) return;
 
   p.impresso = true;
   p.dataImpressao = new Date().toLocaleDateString('pt-BR');
 
-  if(fil) {
-    fil.restante = Math.max(0, fil.restante - pesoUsado);
-  }
+  fils.forEach(l => {
+    if(!l.filamentoId) return;
+    const f = filaments.find(x=>x.id==l.filamentoId);
+    if(f) f.restante = Math.max(0, f.restante - l.peso);
+  });
 
   save();
   renderProducts();
@@ -1416,18 +1426,64 @@ function kpiCard(label, value, delta, deltaCol, icon, iconBg, sub) {
   </div>`;
 }
 
-// ═══ FILAMENT SELECT IN CALC ═══
+// ═══ MULTI-FILAMENT LINES ═══
+let filLines = [{ id: Date.now(), filId: '', peso: 20 }];
+
+function buildFilLineHTML(line) {
+  const opts = filaments.map(f =>
+    `<option value="${f.id}" ${f.id==line.filId?'selected':''}>${f.material} ${f.nome} (${f.restante.toFixed(0)}g)</option>`
+  ).join('');
+  return `
+    <div class="fil-line" id="fl-${line.id}" style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:flex-end;margin-bottom:8px">
+      <div class="field">
+        <label>Filamento</label>
+        <select onchange="updateFilLine(${line.id},'filId',this.value)">
+          <option value="">— sem filamento —</option>
+          ${opts}
+        </select>
+      </div>
+      <div class="field" style="width:110px">
+        <label>Peso (g)</label>
+        <input type="number" value="${line.peso}" min="0" step="0.1" oninput="updateFilLine(${line.id},'peso',this.value)">
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="removeFilLine(${line.id})" style="margin-bottom:1px;flex-shrink:0" title="Remover">✕</button>
+    </div>`;
+}
+
+function renderFilLines() {
+  const wrap = document.getElementById('fil-lines');
+  if(!wrap) return;
+  wrap.innerHTML = filLines.map(buildFilLineHTML).join('');
+  // Hide remove button if only one line
+  if(filLines.length === 1) {
+    const btn = wrap.querySelector('.btn-danger');
+    if(btn) btn.style.visibility = 'hidden';
+  }
+}
+
+function addFilLine() {
+  filLines.push({ id: Date.now(), filId: '', peso: 20 });
+  renderFilLines();
+  calc();
+}
+
+function removeFilLine(id) {
+  if(filLines.length <= 1) return;
+  filLines = filLines.filter(l => l.id !== id);
+  renderFilLines();
+  calc();
+}
+
+function updateFilLine(id, field, value) {
+  const line = filLines.find(l => l.id === id);
+  if(!line) return;
+  line[field] = field === 'peso' ? (parseFloat(value)||0) : value;
+  calc();
+}
+
 function refreshFilamentSelect() {
-  const sel = document.getElementById('c-filament');
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">— sem filamento específico —</option>';
-  filaments.forEach(f => {
-    const opt = document.createElement('option');
-    opt.value = f.id;
-    opt.textContent = `${f.material} ${f.nome} (${f.restante.toFixed(0)}g restantes)`;
-    if(f.id == cur) opt.selected = true;
-    sel.appendChild(opt);
-  });
+  // Rebuild all existing fil-line selects with updated filament data
+  renderFilLines();
 }
 
 // ═══ MODAL HELPERS ═══
@@ -1438,7 +1494,7 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 });
 
 // ═══ INIT ═══
-refreshFilamentSelect();
+renderFilLines();
 calc();
 updateExportSummary();
 renderDashboard();

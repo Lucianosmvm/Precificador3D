@@ -341,6 +341,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
   .pc-prices { width: 100%; display: flex; justify-content: space-between; align-items: center; text-align: left; }
   .page-header { flex-direction: column !important; align-items: flex-start !important; }
   .filament-grid { grid-template-columns: 1fr 1fr; }
+  .dash-mid { grid-template-columns: 1fr !important; }
 }
 @media (max-width: 480px) {
   .main { padding: 0.75rem 0.75rem 90px; }
@@ -352,6 +353,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
   .section-header { gap: 8px; }
   .section-title { font-size: 13px; }
   .modal { width: calc(100vw - 2rem); }
+  .dash-mid { grid-template-columns: 1fr !important; }
 }
 
 .mobile-nav { display: none; }
@@ -397,7 +399,10 @@ html, body { max-width: 100%; overflow-x: hidden; }
       <p>Gestão de impressão 3D</p>
     </div>
     <nav>
-      <div class="nav-item active" onclick="goTo('calc')" id="nav-calc">
+      <div class="nav-item active" onclick="goTo('dash')" id="nav-dash">
+        <span class="nav-icon">📊</span> Dashboard
+      </div>
+      <div class="nav-item" onclick="goTo('calc')" id="nav-calc">
         <span class="nav-icon">🧮</span> Precificador
       </div>
       <div class="nav-item" onclick="goTo('products')" id="nav-products">
@@ -414,7 +419,10 @@ html, body { max-width: 100%; overflow-x: hidden; }
 
   <!-- Mobile nav -->
   <nav class="mobile-nav">
-    <div class="mobile-nav-item active" onclick="goTo('calc')" id="mnav-calc">
+    <div class="mobile-nav-item active" onclick="goTo('dash')" id="mnav-dash">
+      <span class="mobile-nav-icon">📊</span> Dash
+    </div>
+    <div class="mobile-nav-item" onclick="goTo('calc')" id="mnav-calc">
       <span class="mobile-nav-icon">🧮</span> Precificar
     </div>
     <div class="mobile-nav-item" onclick="goTo('products')" id="mnav-products">
@@ -430,8 +438,13 @@ html, body { max-width: 100%; overflow-x: hidden; }
 
   <main class="main">
 
+    <div class="page active" id="page-dash">
+      <!-- Dashboard content injected by JS -->
+      <div id="dash-root"></div>
+    </div>
+
     <!-- ══ PAGE: CALCULADORA ══ -->
-    <div class="page active" id="page-calc">
+    <div class="page" id="page-calc">
       <div class="page-header">
         <h2>Precificador</h2>
         <p>Calcule o preço ideal para seus modelos impressos</p>
@@ -778,7 +791,7 @@ function save() {
 }
 
 // ═══ NAVIGATION ═══
-const pages = ['calc','products','stock','backup'];
+const pages = ['dash','calc','products','stock','backup'];
 
 function goTo(page) {
   pages.forEach(p => {
@@ -788,6 +801,7 @@ function goTo(page) {
     if(n) n.classList.toggle('active', p === page);
     if(mn) mn.classList.toggle('active', p === page);
   });
+  if(page === 'dash') renderDashboard();
   if(page === 'products') renderProducts();
   if(page === 'stock') renderFilaments();
   if(page === 'calc') refreshFilamentSelect();
@@ -1199,6 +1213,199 @@ function importData(mode) {
   if(mode === 'replace') alert('Dados restaurados com sucesso!');
 }
 
+// ═══ DASHBOARD ═══
+function renderDashboard() {
+  const root = document.getElementById('dash-root');
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth();
+
+  // Parse product date "dd/mm/yyyy" → Date
+  function parseDate(p) {
+    // prefer dataImpressao for printed, else data
+    const str = p.impresso && p.dataImpressao ? p.dataImpressao : p.data;
+    if(!str) return null;
+    const [d,m,y] = str.split('/');
+    return new Date(+y, +m-1, +d);
+  }
+
+  // Filter printed products only for financial metrics
+  const printed = products.filter(p => p.impresso);
+
+  // Current month printed
+  const thisMonth = printed.filter(p => {
+    const d = parseDate(p); return d && d.getFullYear()===curYear && d.getMonth()===curMonth;
+  });
+  // Last month
+  const lastMonthDate = new Date(curYear, curMonth-1, 1);
+  const lastMonth = printed.filter(p => {
+    const d = parseDate(p); return d && d.getFullYear()===lastMonthDate.getFullYear() && d.getMonth()===lastMonthDate.getMonth();
+  });
+
+  const sum = (arr, fn) => arr.reduce((a,p) => a + fn(p), 0);
+  const mReceita = sum(thisMonth, p => p.preco * p.qtd);
+  const mCusto   = sum(thisMonth, p => p.custoTotal);
+  const mLucro   = sum(thisMonth, p => p.lucroLiq);
+  const lReceita = sum(lastMonth, p => p.preco * p.qtd);
+  const lLucro   = sum(lastMonth, p => p.lucroLiq);
+
+  function delta(cur, prev) {
+    if(prev === 0) return cur > 0 ? '+100%' : '—';
+    const d = ((cur - prev) / prev * 100).toFixed(0);
+    return (d > 0 ? '+' : '') + d + '%';
+  }
+  function deltaColor(cur, prev) {
+    if(prev === 0) return cur > 0 ? 'var(--green)' : 'var(--text3)';
+    return cur >= prev ? 'var(--green)' : 'var(--red)';
+  }
+
+  // Pending budgets
+  const pendentes = products.filter(p => !p.impresso).length;
+
+  // Last 6 months bars
+  const months6 = [];
+  for(let i = 5; i >= 0; i--) {
+    const d = new Date(curYear, curMonth - i, 1);
+    const y = d.getFullYear(), m = d.getMonth();
+    const mp = printed.filter(p => { const pd = parseDate(p); return pd && pd.getFullYear()===y && pd.getMonth()===m; });
+    const nome = d.toLocaleDateString('pt-BR',{month:'short'}).replace('.','');
+    months6.push({ nome, receita: sum(mp, p=>p.preco*p.qtd), lucro: sum(mp, p=>p.lucroLiq), custo: sum(mp, p=>p.custoTotal), count: mp.length });
+  }
+  const maxVal = Math.max(...months6.map(m => m.receita), 1);
+
+  // Top 5 products by lucro
+  const topProds = [...printed]
+    .sort((a,b) => b.lucroLiq - a.lucroLiq)
+    .slice(0, 5);
+
+  // Filament usage by material
+  const filUsage = {};
+  printed.forEach(p => {
+    const key = p.filamentoNome || 'Sem filamento';
+    const color = p.filamentoColor || '#95A5A6';
+    if(!filUsage[key]) filUsage[key] = { peso: 0, color };
+    filUsage[key].peso += p.pesoUsado || 0;
+  });
+  const filEntries = Object.entries(filUsage).sort((a,b)=>b[1].peso-a[1].peso);
+  const totalFilPeso = filEntries.reduce((a,[,v])=>a+v.peso,0);
+
+  // Month name
+  const mesAtual = now.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+
+  root.innerHTML = `
+    <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+      <div>
+        <h2>Dashboard</h2>
+        <p>Resultados de ${mesAtual}</p>
+      </div>
+      ${pendentes > 0 ? `<div style="background:var(--amber-light);border:1px solid #F5D5A0;border-radius:var(--radius);padding:7px 12px;font-size:13px;color:var(--amber);display:flex;align-items:center;gap:6px">⏳ <b>${pendentes}</b> orçamento${pendentes>1?'s':''} pendente${pendentes>1?'s':''}</div>` : ''}
+    </div>
+
+    <!-- KPI cards -->
+    <div class="grid-4" style="margin-bottom:1.25rem">
+      ${kpiCard('Receita do mês', fmt(mReceita), delta(mReceita,lReceita), deltaColor(mReceita,lReceita), '💰', '#EDE8F8', 'vs mês anterior')}
+      ${kpiCard('Lucro do mês', fmt(mLucro), delta(mLucro,lLucro), deltaColor(mLucro,lLucro), '📈', '#E6F5EC', 'vs mês anterior')}
+      ${kpiCard('Custo do mês', fmt(mCusto), '', '', '🧾', '#FEF0E0', `${thisMonth.length} peça${thisMonth.length!==1?'s':''} impressa${thisMonth.length!==1?'s':''}`)}
+      ${kpiCard('Margem do mês', mReceita>0?(mLucro/mReceita*100).toFixed(1)+'%':'—', '', '', '🎯', '#E3F5F3', 'lucro / receita')}
+    </div>
+
+    <!-- Chart + Filament -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem" class="dash-mid">
+
+      <!-- Bar chart -->
+      <div class="card">
+        <div style="font-size:14px;font-weight:600;margin-bottom:1.25rem;display:flex;justify-content:space-between;align-items:center">
+          <span>Últimos 6 meses</span>
+          <div style="display:flex;gap:12px;font-size:11px;font-weight:500">
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--purple);display:inline-block"></span>Receita</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--green);display:inline-block"></span>Lucro</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:8px;height:140px;padding-bottom:28px;position:relative">
+          ${months6.map((m,i) => {
+            const hR = maxVal > 0 ? (m.receita/maxVal)*110 : 0;
+            const hL = maxVal > 0 ? (m.lucro/maxVal)*110 : 0;
+            const isNow = i === 5;
+            return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative">
+              <div style="display:flex;align-items:flex-end;gap:2px;height:110px">
+                <div style="width:14px;height:${Math.max(2,hR)}px;background:${isNow?'var(--purple)':'#C9BFF0'};border-radius:3px 3px 0 0;transition:height 0.4s" title="Receita: ${fmt(m.receita)}"></div>
+                <div style="width:14px;height:${Math.max(2,hL)}px;background:${isNow?'var(--green)':'#A8D5BC'};border-radius:3px 3px 0 0;transition:height 0.4s" title="Lucro: ${fmt(m.lucro)}"></div>
+              </div>
+              <div style="font-size:10px;color:${isNow?'var(--purple)':'var(--text3)'};font-weight:${isNow?600:400};position:absolute;bottom:-20px;text-transform:capitalize">${m.nome}</div>
+              ${m.count>0?`<div style="font-size:9px;color:var(--text3);position:absolute;bottom:-32px">${m.count}x</div>`:''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Filament usage -->
+      <div class="card">
+        <div style="font-size:14px;font-weight:600;margin-bottom:1.25rem">Filamento consumido</div>
+        ${filEntries.length === 0 ? `<div style="text-align:center;padding:2rem 0;color:var(--text3);font-size:13px">Nenhuma peça impressa ainda</div>` :
+          filEntries.map(([nome, val]) => {
+            const pct = totalFilPeso > 0 ? (val.peso/totalFilPeso*100) : 0;
+            return `<div style="margin-bottom:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:4px">
+                <span style="display:flex;align-items:center;gap:6px">
+                  <span style="width:10px;height:10px;border-radius:50%;background:${val.color};display:inline-block;flex-shrink:0"></span>
+                  <span style="color:var(--text2)">${nome}</span>
+                </span>
+                <span style="font-weight:600;font-family:'DM Mono',monospace;font-size:12px">${val.peso.toFixed(0)}g</span>
+              </div>
+              <div style="background:var(--surface2);border-radius:100px;height:6px;overflow:hidden">
+                <div style="height:100%;width:${pct}%;background:${val.color};border-radius:100px;transition:width 0.5s"></div>
+              </div>
+            </div>`;
+          }).join('')
+        }
+        ${totalFilPeso>0?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--text2);display:flex;justify-content:space-between"><span>Total consumido</span><span style="font-weight:600;font-family:'DM Mono',monospace">${(totalFilPeso/1000).toFixed(3)} kg</span></div>`:''}
+      </div>
+    </div>
+
+    <!-- Top products -->
+    <div class="card">
+      <div style="font-size:14px;font-weight:600;margin-bottom:1.25rem">🏆 Produtos mais lucrativos (todos os tempos)</div>
+      ${topProds.length === 0 ? `<div style="text-align:center;padding:1.5rem 0;color:var(--text3);font-size:13px">Imprima alguns produtos para ver o ranking</div>` :
+        `<div style="display:flex;flex-direction:column;gap:0">
+          ${topProds.map((p,i) => {
+            const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+            const barMax = topProds[0].lucroLiq || 1;
+            const barW = Math.max(4, (p.lucroLiq/barMax)*100);
+            return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;${i<topProds.length-1?'border-bottom:1px solid var(--border)':''}">
+              <span style="font-size:18px;width:24px;text-align:center">${medals[i]||i+1}</span>
+              <span style="font-size:18px">${p.emoji}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nome}</div>
+                <div style="background:var(--surface2);border-radius:100px;height:4px;margin-top:5px;overflow:hidden">
+                  <div style="height:100%;width:${barW}%;background:var(--purple);border-radius:100px"></div>
+                </div>
+              </div>
+              <div style="text-align:right;flex-shrink:0">
+                <div style="font-size:14px;font-weight:600;font-family:'DM Mono',monospace;color:var(--green)">${fmt(p.lucroLiq)}</div>
+                <div style="font-size:11px;color:var(--text3)">venda ${fmt(p.preco)}</div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`
+      }
+    </div>
+  `;
+}
+
+function kpiCard(label, value, delta, deltaCol, icon, iconBg, sub) {
+  return `<div class="stat-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div style="font-size:11px;color:var(--text2);font-weight:500;text-transform:uppercase;letter-spacing:0.4px">${label}</div>
+      <div style="width:32px;height:32px;border-radius:8px;background:${iconBg};display:flex;align-items:center;justify-content:center;font-size:15px">${icon}</div>
+    </div>
+    <div style="font-size:22px;font-weight:600;font-family:'DM Mono',monospace;margin-top:8px;color:var(--text)">${value}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+      <div style="font-size:11px;color:var(--text3)">${sub}</div>
+      ${delta ? `<div style="font-size:11px;font-weight:600;color:${deltaCol}">${delta}</div>` : ''}
+    </div>
+  </div>`;
+}
+
 // ═══ FILAMENT SELECT IN CALC ═══
 function refreshFilamentSelect() {
   const sel = document.getElementById('c-filament');
@@ -1224,6 +1431,7 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 refreshFilamentSelect();
 calc();
 updateExportSummary();
+renderDashboard();
 </script>
 </body>
 </html>

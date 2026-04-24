@@ -623,10 +623,14 @@ html, body { max-width: 100%; overflow-x: hidden; }
             💾 Salvar produto
           </button>
         </div>
-        <div style="margin-top:10px">
+        <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field">
+            <label>Cliente (opcional)</label>
+            <input type="text" id="c-cliente" placeholder="Nome do cliente ou loja...">
+          </div>
           <div class="field">
             <label>Link do arquivo 3D (opcional)</label>
-            <input type="url" id="c-link" placeholder="https://www.thingiverse.com/thing:... ou Printables, Cults3D...">
+            <input type="url" id="c-link" placeholder="https://www.thingiverse.com/thing:...">
           </div>
         </div>
       </div>
@@ -656,6 +660,21 @@ html, body { max-width: 100%; overflow-x: hidden; }
           <div class="stat-label">Filamento impresso</div>
           <div class="stat-value" id="ps-fil" style="color:var(--amber)">0 g</div>
         </div>
+      </div>
+
+      <!-- Search & filter bar -->
+      <div style="display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px;position:relative">
+          <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:15px">🔍</span>
+          <input type="text" id="prod-search" placeholder="Buscar por nome, cliente ou filamento..." oninput="renderProducts()"
+            style="width:100%;height:38px;padding:0 10px 0 34px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:inherit;font-size:14px;color:var(--text)">
+        </div>
+        <select id="prod-filter" onchange="renderProducts()"
+          style="height:38px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:inherit;font-size:14px;color:var(--text);min-width:150px">
+          <option value="all">Todos</option>
+          <option value="orcamento">⏳ Orçamentos</option>
+          <option value="impresso">✅ Impressos</option>
+        </select>
       </div>
 
       <div id="products-list" class="products-list"></div>
@@ -795,6 +814,11 @@ html, body { max-width: 100%; overflow-x: hidden; }
       <div class="field">
         <label>Link do arquivo 3D (opcional)</label>
         <input type="url" id="ep-link" placeholder="https://...">
+      </div>
+
+      <div class="field">
+        <label>Cliente (opcional)</label>
+        <input type="text" id="ep-cliente" placeholder="Nome do cliente ou loja...">
       </div>
 
       <div style="background:var(--bg);border-radius:var(--radius);padding:12px">
@@ -953,6 +977,7 @@ function saveProduct() {
   if(!nome) { alert('Digite um nome para o modelo.'); return; }
   const emoji = document.getElementById('c-emoji').value.trim() || '🖨️';
   const link = document.getElementById('c-link').value.trim();
+  const cliente = document.getElementById('c-cliente').value.trim();
   const qtd = parseInt(g('c-qtd')) || 1;
   const desp = g('c-desperdicio-global');
 
@@ -989,6 +1014,7 @@ function saveProduct() {
     qtd,
     impresso: false,
     link: link || null,
+    cliente: cliente || null,
     data: new Date().toLocaleDateString('pt-BR'),
     breakdown: { ...lastCalc }
   };
@@ -999,6 +1025,7 @@ function saveProduct() {
   document.getElementById('c-nome').value = '';
   document.getElementById('c-emoji').value = '';
   document.getElementById('c-link').value = '';
+  document.getElementById('c-cliente').value = '';
 }
 
 // ═══ RENDER PRODUCTS ═══
@@ -1023,7 +1050,26 @@ function renderProducts() {
   document.getElementById('ps-lucro').textContent = fmt(totLucro);
   document.getElementById('ps-fil').textContent = (totFil/1000).toFixed(2) + ' kg';
 
-  list.innerHTML = products.map(p => {
+  // Search & filter
+  const search = (document.getElementById('prod-search')?.value || '').toLowerCase();
+  const filter = document.getElementById('prod-filter')?.value || 'all';
+
+  let visible = products.filter(p => {
+    if(filter === 'orcamento' && p.impresso) return false;
+    if(filter === 'impresso' && !p.impresso) return false;
+    if(search) {
+      const haystack = [p.nome, p.cliente, p.filamentoNome, p.data].filter(Boolean).join(' ').toLowerCase();
+      if(!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+
+  if(!visible.length) {
+    list.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><p>Nenhum produto encontrado.<br><span style="font-size:12px;color:var(--text3)">Tente outro termo ou filtro.</span></p></div>`;
+    return;
+  }
+
+  list.innerHTML = visible.map(p => {
     const statusBadge = p.impresso
       ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;background:var(--green-light);color:var(--green)">✅ Impresso</span>`
       : `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;background:var(--amber-light);color:var(--amber)">⏳ Orçamento</span>`;
@@ -1039,6 +1085,7 @@ function renderProducts() {
           ${statusBadge}
         </div>
         <div class="pc-meta">
+          ${p.cliente ? `<span style="color:var(--purple);font-weight:500">👤 ${p.cliente}</span>` : ''}
           <span><span class="fil-dot" style="background:${p.filamentoColor}"></span>${p.filamentoNome}</span>
           <span>⚖️ ${(p.pesoUsado||0).toFixed(1)}g</span>
           <span>⏱️ ${(p.horas||0).toFixed(1)}h</span>
@@ -1056,6 +1103,7 @@ function renderProducts() {
       <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
         ${printBtn}
         <button class="btn btn-outline btn-sm" onclick="openEditProduct(${p.id})">✏️ Editar</button>
+        <button class="btn btn-outline btn-sm" onclick="duplicateProduct(${p.id})" title="Duplicar orçamento">📋 Duplicar</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">🗑️</button>
       </div>
     </div>
@@ -1066,6 +1114,20 @@ function deleteProduct(id) {
   deleteTarget = { type: 'product', id };
   document.getElementById('modal-delete-msg').textContent = 'Deseja remover este produto do histórico? O estoque não será restaurado.';
   openModal('modal-delete');
+}
+
+function duplicateProduct(id) {
+  const p = products.find(x => x.id === id);
+  if(!p) return;
+  const copy = JSON.parse(JSON.stringify(p));
+  copy.id = Date.now();
+  copy.nome = p.nome + ' (cópia)';
+  copy.impresso = false;
+  copy.dataImpressao = null;
+  copy.data = new Date().toLocaleDateString('pt-BR');
+  products.unshift(copy);
+  save();
+  renderProducts();
 }
 
 function markPrinted(id) {
@@ -1109,6 +1171,7 @@ function openEditProduct(id) {
   document.getElementById('ep-nome').value = p.nome || '';
   document.getElementById('ep-emoji').value = p.emoji || '🖨️';
   document.getElementById('ep-link').value = p.link || '';
+  document.getElementById('ep-cliente').value = p.cliente || '';
   document.getElementById('ep-preco').value = p.preco || 0;
   document.getElementById('ep-custo').value = p.custoTotal || 0;
   document.getElementById('ep-horas').value = p.horas || 0;
@@ -1222,6 +1285,7 @@ function saveEditProduct() {
   p.nome = document.getElementById('ep-nome').value.trim() || p.nome;
   p.emoji = document.getElementById('ep-emoji').value.trim() || '🖨️';
   p.link = document.getElementById('ep-link').value.trim() || null;
+  p.cliente = document.getElementById('ep-cliente').value.trim() || null;
   p.preco = preco;
   p.custoTotal = custo;
   p.lucroLiq = preco - custo;

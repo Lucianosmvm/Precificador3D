@@ -403,7 +403,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
         <span class="nav-icon">📊</span> Dashboard
       </div>
       <div class="nav-item" onclick="goTo('calc')" id="nav-calc">
-        <span class="nav-icon">🧮</span> Precificador
+        <span class="nav-icon">🧮</span> Orçamento
       </div>
       <div class="nav-item" onclick="goTo('products')" id="nav-products">
         <span class="nav-icon">📦</span> Produtos
@@ -423,7 +423,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
       <span class="mobile-nav-icon">📊</span> Dash
     </div>
     <div class="mobile-nav-item" onclick="goTo('calc')" id="mnav-calc">
-      <span class="mobile-nav-icon">🧮</span> Precificar
+      <span class="mobile-nav-icon">🧮</span> Orçamento
     </div>
     <div class="mobile-nav-item" onclick="goTo('products')" id="mnav-products">
       <span class="mobile-nav-icon">📦</span> Produtos
@@ -627,6 +627,12 @@ html, body { max-width: 100%; overflow-x: hidden; }
           <button class="btn btn-primary" onclick="saveProduct()" style="margin-top:20px">
             💾 Salvar produto
           </button>
+        </div>
+        <div style="margin-top:10px">
+          <div class="field">
+            <label>Link do arquivo 3D (opcional)</label>
+            <input type="url" id="c-link" placeholder="https://www.thingiverse.com/thing:... ou Printables, Cults3D...">
+          </div>
         </div>
       </div>
     </div>
@@ -889,6 +895,7 @@ function saveProduct() {
   const nome = document.getElementById('c-nome').value.trim();
   if(!nome) { alert('Digite um nome para o modelo.'); return; }
   const emoji = document.getElementById('c-emoji').value.trim() || '🖨️';
+  const link = document.getElementById('c-link').value.trim();
   const filId = document.getElementById('c-filament').value;
   const qtd = parseInt(g('c-qtd')) || 1;
   const fil = filId ? filaments.find(x=>x.id==filId) : null;
@@ -907,6 +914,7 @@ function saveProduct() {
     horas: lastCalc.horas * qtd,
     qtd,
     impresso: false,
+    link: link || null,
     data: new Date().toLocaleDateString('pt-BR'),
     breakdown: { ...lastCalc }
   };
@@ -916,6 +924,7 @@ function saveProduct() {
   alert(`✅ "${nome}" salvo como orçamento!\nClique em "Imprimir" na lista de produtos quando for produzir a peça.`);
   document.getElementById('c-nome').value = '';
   document.getElementById('c-emoji').value = '';
+  document.getElementById('c-link').value = '';
 }
 
 // ═══ RENDER PRODUCTS ═══
@@ -962,6 +971,7 @@ function renderProducts() {
           ${p.qtd > 1 ? `<span>✕${p.qtd}</span>` : ''}
           <span>📅 ${p.data}</span>
           ${p.dataImpressao ? `<span>🖨️ ${p.dataImpressao}</span>` : ''}
+          ${p.link ? `<a href="${p.link}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;color:var(--purple);text-decoration:none;font-weight:500" title="${p.link}">🔗 Ver arquivo</a>` : ''}
         </div>
       </div>
       <div class="pc-prices">

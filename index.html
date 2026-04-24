@@ -460,7 +460,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
           </div>
         </div>
         <div id="filament-warning" style="display:none;margin-top:8px;padding:7px 10px;background:var(--amber-light);border-radius:var(--radius);font-size:13px;color:var(--amber);">
-          ⚠️ Estoque insuficiente para este modelo.
+          ⚠️ Estoque insuficiente para este modelo. O desconto só ocorre ao clicar em "Imprimir".
         </div>
         <div class="section-result"><span>Custo filamento:</span><strong id="r1">R$ 0,00</strong></div>
       </div>
@@ -639,7 +639,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
           <div class="stat-value" id="ps-lucro" style="color:var(--green)">R$ 0</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Filamento usado</div>
+          <div class="stat-label">Filamento impresso</div>
           <div class="stat-value" id="ps-fil" style="color:var(--amber)">0 g</div>
         </div>
       </div>
@@ -880,15 +880,6 @@ function saveProduct() {
   const fil = filId ? filaments.find(x=>x.id==filId) : null;
   const pesoUsado = lastCalc.pesoComDesp * qtd;
 
-  // Discount from stock
-  if(fil) {
-    if(fil.restante < pesoUsado) {
-      if(!confirm(`Estoque insuficiente! ${fil.nome} tem ${fil.restante.toFixed(0)}g e você precisa de ${pesoUsado.toFixed(0)}g. Salvar mesmo assim?`)) return;
-    }
-    fil.restante = Math.max(0, fil.restante - pesoUsado);
-    save();
-  }
-
   const product = {
     id: Date.now(),
     nome, emoji,
@@ -901,13 +892,14 @@ function saveProduct() {
     lucroLiq: lastCalc.lucroLiq * qtd,
     horas: lastCalc.horas * qtd,
     qtd,
+    impresso: false,
     data: new Date().toLocaleDateString('pt-BR'),
     breakdown: { ...lastCalc }
   };
 
   products.unshift(product);
   save();
-  alert(`✅ "${nome}" salvo! ${fil ? `\n${pesoUsado.toFixed(1)}g descontado do estoque de ${fil.material} ${fil.nome}.` : ''}`);
+  alert(`✅ "${nome}" salvo como orçamento!\nClique em "Imprimir" na lista de produtos quando for produzir a peça.`);
   document.getElementById('c-nome').value = '';
   document.getElementById('c-emoji').value = '';
 }
@@ -926,24 +918,36 @@ function renderProducts() {
 
   const totReceita = products.reduce((a,p) => a + p.preco * p.qtd, 0);
   const totLucro = products.reduce((a,p) => a + p.lucroLiq, 0);
-  const totFil = products.reduce((a,p) => a + (p.pesoUsado||0), 0);
+  const totFil = products.filter(p=>p.impresso).reduce((a,p) => a + (p.pesoUsado||0), 0);
+  const totOrcamentos = products.filter(p=>!p.impresso).length;
 
   document.getElementById('ps-total').textContent = products.length;
   document.getElementById('ps-receita').textContent = fmt(totReceita);
   document.getElementById('ps-lucro').textContent = fmt(totLucro);
   document.getElementById('ps-fil').textContent = (totFil/1000).toFixed(2) + ' kg';
 
-  list.innerHTML = products.map(p => `
-    <div class="product-card">
+  list.innerHTML = products.map(p => {
+    const statusBadge = p.impresso
+      ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;background:var(--green-light);color:var(--green)">✅ Impresso</span>`
+      : `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;background:var(--amber-light);color:var(--amber)">⏳ Orçamento</span>`;
+    const printBtn = !p.impresso
+      ? `<button class="btn btn-primary btn-sm" onclick="markPrinted(${p.id})" title="Confirmar impressão e descontar estoque">🖨️ Imprimir</button>`
+      : `<button class="btn btn-outline btn-sm" disabled style="opacity:0.4;cursor:default">🖨️ Impresso</button>`;
+    return `
+    <div class="product-card" style="${p.impresso ? '' : 'border-left: 3px solid var(--amber);'}">
       <div class="pc-icon">${p.emoji}</div>
       <div class="pc-info">
-        <div class="pc-name">${p.nome}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+          <div class="pc-name" style="margin-bottom:0">${p.nome}</div>
+          ${statusBadge}
+        </div>
         <div class="pc-meta">
           <span><span class="fil-dot" style="background:${p.filamentoColor}"></span>${p.filamentoNome}</span>
           <span>⚖️ ${(p.pesoUsado||0).toFixed(1)}g</span>
           <span>⏱️ ${(p.horas||0).toFixed(1)}h</span>
           ${p.qtd > 1 ? `<span>✕${p.qtd}</span>` : ''}
           <span>📅 ${p.data}</span>
+          ${p.dataImpressao ? `<span>🖨️ ${p.dataImpressao}</span>` : ''}
         </div>
       </div>
       <div class="pc-prices">
@@ -951,15 +955,43 @@ function renderProducts() {
         <div class="pc-cost">Custo: ${fmt(p.custoTotal)}</div>
         <div class="pc-profit">+${fmt(p.lucroLiq)} lucro</div>
       </div>
-      <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">🗑️</button>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        ${printBtn}
+        <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">🗑️</button>
+      </div>
     </div>
-  `).join('');
+  `}).join('');
 }
 
 function deleteProduct(id) {
   deleteTarget = { type: 'product', id };
   document.getElementById('modal-delete-msg').textContent = 'Deseja remover este produto do histórico? O estoque não será restaurado.';
   openModal('modal-delete');
+}
+
+function markPrinted(id) {
+  const p = products.find(x=>x.id===id);
+  if(!p || p.impresso) return;
+
+  const fil = p.filamentoId ? filaments.find(x=>x.id==p.filamentoId) : null;
+  const pesoUsado = p.pesoUsado || 0;
+
+  let msg = `Confirmar impressão de "${p.nome}"?`;
+  if(fil) {
+    msg += `\n\n${pesoUsado.toFixed(1)}g serão descontados do estoque de ${fil.material} ${fil.nome} (${fil.restante.toFixed(0)}g restantes).`;
+    if(fil.restante < pesoUsado) msg += `\n\n⚠️ Estoque insuficiente! O saldo ficará negativo.`;
+  }
+  if(!confirm(msg)) return;
+
+  p.impresso = true;
+  p.dataImpressao = new Date().toLocaleDateString('pt-BR');
+
+  if(fil) {
+    fil.restante = Math.max(0, fil.restante - pesoUsado);
+  }
+
+  save();
+  renderProducts();
 }
 
 // ═══ FILAMENT STOCK ═══

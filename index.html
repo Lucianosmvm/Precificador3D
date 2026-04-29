@@ -584,15 +584,15 @@ html, body { max-width: 100%; overflow-x: hidden; }
         <div class="results-title">Resultado da precificação</div>
         <div class="metrics-row">
           <div class="metric">
-            <div class="metric-label">Custo unit.</div>
+            <div class="metric-label" id="m-custo-label">Custo unit.</div>
             <div class="metric-value" id="m-custo">R$ 0,00</div>
           </div>
           <div class="metric">
-            <div class="metric-label">Preço de venda</div>
+            <div class="metric-label">Preço unitário</div>
             <div class="metric-value purple" id="m-preco">R$ 0,00</div>
           </div>
           <div class="metric">
-            <div class="metric-label">Lucro líquido</div>
+            <div class="metric-label" id="m-lucro-label">Lucro líquido</div>
             <div class="metric-value green" id="m-lucro">R$ 0,00</div>
           </div>
           <div class="metric">
@@ -908,67 +908,93 @@ const fmtN = (v,d=2) => v.toLocaleString('pt-BR',{minimumFractionDigits:d,maximu
 let lastCalc = {};
 
 function calc() {
+  const qtd = Math.max(1, parseInt(g('c-qtd')) || 1);
   const watts = g('c-watts'), horas = g('c-horas'), tarifa = g('c-tarifa');
   const min = g('c-minutos'), vh = g('c-valorHora');
   const vi = g('c-impressora'), vu = g('c-vidaUtil'), man = g('c-manutencao');
   const emb = g('c-embalagem'), taxaMkt = g('c-taxaMkt'), outros = g('c-outros');
   const margem = g('c-margem');
-  // Filament cost (multi)
-  let r1 = 0;
+
+  // ── Unit costs ──
+  let r1unit = 0;
   let hasStockWarning = false;
   const desp = g('c-desperdicio-global');
   filLines.forEach(line => {
     const f = line.filId ? filaments.find(x=>x.id==line.filId) : null;
     const pricePerKg = f ? f.precoKg : 100;
     const pesoComDesp = line.peso * (1 + desp/100);
-    r1 += (pesoComDesp / 1000) * pricePerKg;
-    if(f && f.restante < pesoComDesp) hasStockWarning = true;
+    r1unit += (pesoComDesp / 1000) * pricePerKg;
+    if(f && f.restante < pesoComDesp * qtd) hasStockWarning = true;
   });
-  const totalPesoComDesp = filLines.reduce((a,l) => a + l.peso * (1 + desp/100), 0);
+  const totalPesoUnit = filLines.reduce((a,l) => a + l.peso * (1 + desp/100), 0);
 
-  // Energy
   const kwh = (watts / 1000) * horas;
-  const r2 = kwh * tarifa;
-
-  // Labor
-  const r3 = (min / 60) * vh;
-
-  // Depreciation
+  const r2unit = kwh * tarifa;
+  const r3unit = (min / 60) * vh;
   const deprH = vu > 0 ? vi / vu : 0;
   const manH = man / (30 * 8);
-  const r4 = (deprH + manH) * horas;
+  const r4unit = (deprH + manH) * horas;
+  const r5unit = emb + outros;
 
-  // Extras
-  const r5base = emb + outros;
-  const custoSemTaxa = r1 + r2 + r3 + r4 + r5base;
-
-  // Price
+  const custoSemTaxaUnit = r1unit + r2unit + r3unit + r4unit + r5unit;
   const taxaDec = taxaMkt / 100;
   const margemDec = margem / 100;
-  const preco = taxaDec < 1 ? custoSemTaxa * (1 + margemDec) / (1 - taxaDec) : custoSemTaxa * (1 + margemDec);
-  const r6 = preco * taxaDec;
-  const custoTotal = custoSemTaxa + r6;
-  const lucroLiq = preco - custoTotal;
-  const margemReal = preco > 0 ? (lucroLiq / preco) * 100 : 0;
+  const precoUnit = taxaDec < 1
+    ? custoSemTaxaUnit * (1 + margemDec) / (1 - taxaDec)
+    : custoSemTaxaUnit * (1 + margemDec);
+  const r6unit = precoUnit * taxaDec;
+  const custoTotalUnit = custoSemTaxaUnit + r6unit;
+  const lucroUnit = precoUnit - custoTotalUnit;
+  const margemReal = precoUnit > 0 ? (lucroUnit / precoUnit) * 100 : 0;
+
+  // ── Totals (× qty) ──
+  const r1 = r1unit * qtd;
+  const r2 = r2unit * qtd;
+  const r3 = r3unit * qtd;
+  const r4 = r4unit * qtd;
+  const r5 = r5unit * qtd;
+  const r6 = r6unit * qtd;
+  const custoTotal = custoTotalUnit * qtd;
+  const precoTotal = precoUnit * qtd;
+  const lucroTotal = lucroUnit * qtd;
 
   document.getElementById('filament-warning').style.display = hasStockWarning ? 'block' : 'none';
 
-  // Update UI
-  ['r1','r2','r3','r4'].forEach((id,i)=>{
-    document.getElementById(id).textContent = fmt([r1,r2,r3,r4][i]);
-  });
-  ['b1','b2','b3','b4'].forEach((id,i)=>{
-    document.getElementById(id).textContent = fmt([r1,r2,r3,r4][i]);
-  });
-  document.getElementById('b5').textContent = fmt(r5base);
-  document.getElementById('b6').textContent = fmt(r6);
+  // Section subtotals (always unit)
+  document.getElementById('r1').textContent = fmt(r1unit);
+  document.getElementById('r2').textContent = fmt(r2unit);
+  document.getElementById('r3').textContent = fmt(r3unit);
+  document.getElementById('r4').textContent = fmt(r4unit);
+
+  // Breakdown (total when qty > 1)
+  document.getElementById('b1').textContent = qtd > 1 ? `${fmt(r1unit)} × ${qtd} = ${fmt(r1)}` : fmt(r1);
+  document.getElementById('b2').textContent = qtd > 1 ? `${fmt(r2unit)} × ${qtd} = ${fmt(r2)}` : fmt(r2);
+  document.getElementById('b3').textContent = qtd > 1 ? `${fmt(r3unit)} × ${qtd} = ${fmt(r3)}` : fmt(r3);
+  document.getElementById('b4').textContent = qtd > 1 ? `${fmt(r4unit)} × ${qtd} = ${fmt(r4)}` : fmt(r4);
+  document.getElementById('b5').textContent = qtd > 1 ? `${fmt(r5unit)} × ${qtd} = ${fmt(r5)}` : fmt(r5);
+  document.getElementById('b6').textContent = qtd > 1 ? `${fmt(r6unit)} × ${qtd} = ${fmt(r6)}` : fmt(r6);
   document.getElementById('b7').textContent = fmt(custoTotal);
+
+  // Metrics
   document.getElementById('m-custo').textContent = fmt(custoTotal);
-  document.getElementById('m-preco').textContent = fmt(preco);
-  document.getElementById('m-lucro').textContent = fmt(lucroLiq);
+  document.getElementById('m-preco').textContent = qtd > 1 ? `${fmt(precoUnit)} un · ${fmt(precoTotal)} total` : fmt(precoUnit);
+  document.getElementById('m-lucro').textContent = fmt(lucroTotal);
   document.getElementById('m-margem').textContent = fmtN(margemReal,1) + '%';
 
-  lastCalc = { r1, r2, r3, r4, r5base, r6, custoTotal, preco, lucroLiq, margemReal, pesoComDesp: totalPesoComDesp, horas };
+  // Labels update based on qty
+  document.getElementById('m-custo-label').textContent = qtd > 1 ? `Custo total (${qtd}x)` : 'Custo unit.';
+  document.getElementById('m-lucro-label').textContent = qtd > 1 ? `Lucro total (${qtd}x)` : 'Lucro líquido';
+
+  lastCalc = {
+    r1: r1unit, r2: r2unit, r3: r3unit, r4: r4unit,
+    r5base: r5unit, r6: r6unit,
+    custoTotal: custoTotalUnit,
+    preco: precoUnit,
+    lucroLiq: lucroUnit,
+    margemReal,
+    pesoComDesp: totalPesoUnit,
+    horas
+  };
 }
 
 // ═══ SAVE PRODUCT ═══

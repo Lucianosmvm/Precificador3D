@@ -184,7 +184,7 @@ body {
 }
 .results-title { font-size: 15px; font-weight: 600; text-align: center; margin-bottom: 1.25rem; color: var(--text); }
 
-.metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+.metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
 .metric {
   background: #fff;
   border-radius: var(--radius);
@@ -194,7 +194,6 @@ body {
 }
 .metric-label { font-size: 11px; color: var(--text3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 5px; }
 .metric-value { font-size: 19px; font-weight: 600; font-family: 'DM Mono', monospace; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.metric-value.multi { font-size: 13px; line-height: 1.4; white-space: normal; }
 .metric-value.purple { color: var(--purple); }
 .metric-value.green { color: var(--green); }
 
@@ -359,6 +358,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
   .card { padding: 1rem; }
   .results-panel { padding: 1rem; }
   .metrics-row { grid-template-columns: 1fr 1fr; }
+  .metrics-row .metric:last-child:nth-child(odd) { grid-column: span 2; }
   .save-row { flex-direction: column; align-items: stretch; }
   .save-row .btn { width: 100%; justify-content: center; margin-top: 0; }
   .product-card { flex-wrap: wrap; gap: 0.75rem; }
@@ -372,6 +372,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
   .filament-grid { grid-template-columns: 1fr; }
   .metrics-row { grid-template-columns: 1fr 1fr; }
+  .metrics-row .metric:last-child:nth-child(odd) { grid-column: span 2; }
   .product-card { flex-direction: column; }
   .pc-icon:not(:has(img)) { display: none; }
   .section-header { gap: 8px; }
@@ -618,6 +619,10 @@ html, body { max-width: 100%; overflow-x: hidden; }
           <div class="metric">
             <div class="metric-label">Preço unitário</div>
             <div class="metric-value purple" id="m-preco">R$ 0,00</div>
+          </div>
+          <div class="metric" id="m-preco-total-card" style="display:none">
+            <div class="metric-label">Preço total</div>
+            <div class="metric-value purple" id="m-preco-total">R$ 0,00</div>
           </div>
           <div class="metric">
             <div class="metric-label" id="m-lucro-label">Lucro líquido</div>
@@ -1021,14 +1026,10 @@ function calc() {
 
   // Metrics
   document.getElementById('m-custo').textContent = fmt(custoTotal);
-  const mPreco = document.getElementById('m-preco');
-  if (qtd > 1) {
-    mPreco.textContent = `${fmt(precoUnit)} un · ${fmt(precoTotal)} total`;
-    mPreco.classList.add('multi');
-  } else {
-    mPreco.textContent = fmt(precoUnit);
-    mPreco.classList.remove('multi');
-  }
+  document.getElementById('m-preco').textContent = fmt(precoUnit);
+  const totalCard = document.getElementById('m-preco-total-card');
+  totalCard.style.display = qtd > 1 ? '' : 'none';
+  document.getElementById('m-preco-total').textContent = fmt(precoTotal);
   document.getElementById('m-lucro').textContent = fmt(lucroTotal);
   document.getElementById('m-margem').textContent = fmtN(margemReal,1) + '%';
 

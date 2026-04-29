@@ -372,7 +372,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
   .filament-grid { grid-template-columns: 1fr; }
   .metrics-row { grid-template-columns: 1fr 1fr; }
   .product-card { flex-direction: column; }
-  .pc-icon { display: none; }
+  .pc-icon:not(:has(img)) { display: none; }
   .section-header { gap: 8px; }
   .section-title { font-size: 13px; }
   .modal { width: calc(100vw - 2rem); }

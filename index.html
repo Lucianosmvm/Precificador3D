@@ -439,6 +439,9 @@ html, body { max-width: 100%; overflow-x: hidden; }
       <div class="nav-item" onclick="goTo('backup')" id="nav-backup">
         <span class="nav-icon">💾</span> Backup
       </div>
+      <div class="nav-item" onclick="goTo('config')" id="nav-config">
+        <span class="nav-icon">⚙️</span> Configurações
+      </div>
     </nav>
   </aside>
 
@@ -458,6 +461,9 @@ html, body { max-width: 100%; overflow-x: hidden; }
     </div>
     <div class="mobile-nav-item" onclick="goTo('backup')" id="mnav-backup">
       <span class="mobile-nav-icon">💾</span> Backup
+    </div>
+    <div class="mobile-nav-item" onclick="goTo('config')" id="mnav-config">
+      <span class="mobile-nav-icon">⚙️</span> Config
     </div>
   </nav>
 
@@ -486,10 +492,6 @@ html, body { max-width: 100%; overflow-x: hidden; }
 
         <div style="display:flex;align-items:flex-end;gap:8px;margin-top:8px;flex-wrap:wrap">
           <button class="btn btn-outline btn-sm" onclick="addFilLine()">+ Adicionar filamento</button>
-          <div class="field" style="width:160px">
-            <label>Desperdício global (%)</label>
-            <input type="number" id="c-desperdicio-global" value="5" min="0" max="100" step="1" oninput="calc()">
-          </div>
         </div>
 
         <div id="filament-warning" style="display:none;margin-top:8px;padding:7px 10px;background:var(--amber-light);border-radius:var(--radius);font-size:13px;color:var(--amber);">
@@ -504,11 +506,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
           <div class="step-badge s2">2</div>
           <span class="section-title">Energia elétrica</span>
         </div>
-        <div class="grid-4">
-          <div class="field">
-            <label>Consumo (W)</label>
-            <input type="number" id="c-watts" value="150" min="0" step="10" oninput="calc()">
-          </div>
+        <div class="grid-2">
           <div class="field">
             <label>Tempo impressão (h)</label>
             <input type="number" id="c-horas" value="5" min="0" step="1" oninput="calc()">
@@ -516,10 +514,6 @@ html, body { max-width: 100%; overflow-x: hidden; }
           <div class="field">
             <label>Tempo impressão (min)</label>
             <input type="number" id="c-horas-min" value="0" min="0" max="59" step="1" oninput="calc()">
-          </div>
-          <div class="field">
-            <label>Tarifa kWh (R$)</label>
-            <input type="number" id="c-tarifa" value="0.75" min="0" step="0.01" oninput="calc()">
           </div>
         </div>
         <div class="section-result"><span>Custo energia:</span><strong id="r2">R$ 0,00</strong></div>
@@ -544,33 +538,10 @@ html, body { max-width: 100%; overflow-x: hidden; }
         <div class="section-result"><span>Custo mão de obra:</span><strong id="r3">R$ 0,00</strong></div>
       </div>
 
-      <!-- Step 4: Depreciation -->
+      <!-- Step 4: Extra -->
       <div class="section">
         <div class="section-header">
           <div class="step-badge s4">4</div>
-          <span class="section-title">Depreciação e manutenção</span>
-        </div>
-        <div class="grid-3">
-          <div class="field">
-            <label>Valor da impressora (R$)</label>
-            <input type="number" id="c-impressora" value="4800" min="0" step="100" oninput="calc()">
-          </div>
-          <div class="field">
-            <label>Vida útil (horas)</label>
-            <input type="number" id="c-vidaUtil" value="10000" min="1" step="100" oninput="calc()">
-          </div>
-          <div class="field">
-            <label>Manutenção mensal (R$)</label>
-            <input type="number" id="c-manutencao" value="50" min="0" step="5" oninput="calc()">
-          </div>
-        </div>
-        <div class="section-result"><span>Custo depreciação/manutenção:</span><strong id="r4">R$ 0,00</strong></div>
-      </div>
-
-      <!-- Step 5: Extra -->
-      <div class="section">
-        <div class="section-header">
-          <div class="step-badge s5">5</div>
           <span class="section-title">Custos adicionais</span>
         </div>
         <div class="grid-3">
@@ -590,10 +561,10 @@ html, body { max-width: 100%; overflow-x: hidden; }
         <p class="hint">A taxa de marketplace incide sobre o preço final de venda.</p>
       </div>
 
-      <!-- Step 6: Margin -->
+      <!-- Step 5: Margin -->
       <div class="section">
         <div class="section-header">
-          <div class="step-badge s6">6</div>
+          <div class="step-badge s5">5</div>
           <span class="section-title">Margem de lucro</span>
         </div>
         <div class="grid-2">
@@ -724,6 +695,61 @@ html, body { max-width: 100%; overflow-x: hidden; }
       </div>
 
       <div id="filament-list" class="filament-grid"></div>
+    </div>
+
+    <!-- ══ PAGE: CONFIGURAÇÕES ══ -->
+    <div class="page" id="page-config">
+      <div class="page-header">
+        <h2>Configurações</h2>
+        <p>Valores que raramente mudam — configure uma vez e esqueça</p>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <div class="step-badge s1">🖨️</div>
+          <span class="section-title">Impressora</span>
+        </div>
+        <div class="grid-3">
+          <div class="field">
+            <label>Consumo (W)</label>
+            <input type="number" id="cfg-watts" value="150" min="0" step="10">
+          </div>
+          <div class="field">
+            <label>Tarifa kWh (R$)</label>
+            <input type="number" id="cfg-tarifa" value="0.75" min="0" step="0.01">
+          </div>
+          <div class="field">
+            <label>Desperdício global (%)</label>
+            <input type="number" id="cfg-desperdicio" value="5" min="0" max="100" step="1">
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <div class="step-badge s4">📉</div>
+          <span class="section-title">Depreciação e manutenção</span>
+        </div>
+        <div class="grid-3">
+          <div class="field">
+            <label>Valor da impressora (R$)</label>
+            <input type="number" id="cfg-impressora" value="4800" min="0" step="100">
+          </div>
+          <div class="field">
+            <label>Vida útil (horas)</label>
+            <input type="number" id="cfg-vidaUtil" value="10000" min="1" step="100">
+          </div>
+          <div class="field">
+            <label>Manutenção mensal (R$)</label>
+            <input type="number" id="cfg-manutencao" value="50" min="0" step="5">
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;margin-top:0.5rem">
+        <button class="btn btn-primary" onclick="saveConfig()">💾 Salvar configurações</button>
+        <span id="cfg-saved-msg" style="font-size:13px;color:var(--green);opacity:0;transition:opacity 0.4s"></span>
+      </div>
     </div>
 
     <!-- PAGE: BACKUP -->
@@ -931,8 +957,38 @@ function save() {
   localStorage.setItem('p3d_products', JSON.stringify(products));
 }
 
+// ═══ CONFIGURAÇÕES ═══
+const CONFIG_DEFAULTS = { watts:150, tarifa:0.75, desperdicio:5, impressora:4800, vidaUtil:10000, manutencao:50 };
+
+function loadConfig() {
+  const cfg = JSON.parse(localStorage.getItem('p3d_config') || 'null') || CONFIG_DEFAULTS;
+  document.getElementById('cfg-watts').value = cfg.watts;
+  document.getElementById('cfg-tarifa').value = cfg.tarifa;
+  document.getElementById('cfg-desperdicio').value = cfg.desperdicio;
+  document.getElementById('cfg-impressora').value = cfg.impressora;
+  document.getElementById('cfg-vidaUtil').value = cfg.vidaUtil;
+  document.getElementById('cfg-manutencao').value = cfg.manutencao;
+}
+
+function saveConfig() {
+  const cfg = {
+    watts: parseFloat(document.getElementById('cfg-watts').value) || CONFIG_DEFAULTS.watts,
+    tarifa: parseFloat(document.getElementById('cfg-tarifa').value) || CONFIG_DEFAULTS.tarifa,
+    desperdicio: parseFloat(document.getElementById('cfg-desperdicio').value) || 0,
+    impressora: parseFloat(document.getElementById('cfg-impressora').value) || 0,
+    vidaUtil: parseFloat(document.getElementById('cfg-vidaUtil').value) || CONFIG_DEFAULTS.vidaUtil,
+    manutencao: parseFloat(document.getElementById('cfg-manutencao').value) || 0,
+  };
+  localStorage.setItem('p3d_config', JSON.stringify(cfg));
+  calc();
+  const msg = document.getElementById('cfg-saved-msg');
+  msg.textContent = '✓ Configurações salvas';
+  msg.style.opacity = '1';
+  setTimeout(() => { msg.style.opacity = '0'; }, 2500);
+}
+
 // ═══ NAVIGATION ═══
-const pages = ['dash','calc','products','stock','backup'];
+const pages = ['dash','calc','products','stock','backup','config'];
 
 function goTo(page) {
   pages.forEach(p => {
@@ -957,17 +1013,17 @@ let lastCalc = {};
 
 function calc() {
   const qtd = Math.max(1, parseInt(g('c-qtd')) || 1);
-  const watts = g('c-watts'), tarifa = g('c-tarifa');
+  const watts = g('cfg-watts'), tarifa = g('cfg-tarifa');
   const horas = g('c-horas') + g('c-horas-min') / 60;
   const min = g('c-minutos'), vh = g('c-valorHora');
-  const vi = g('c-impressora'), vu = g('c-vidaUtil'), man = g('c-manutencao');
+  const vi = g('cfg-impressora'), vu = g('cfg-vidaUtil'), man = g('cfg-manutencao');
   const emb = g('c-embalagem'), taxaMkt = g('c-taxaMkt'), outros = g('c-outros');
   const margem = g('c-margem');
 
   // ── Unit costs ──
   let r1unit = 0;
   let hasStockWarning = false;
-  const desp = g('c-desperdicio-global');
+  const desp = g('cfg-desperdicio');
   filLines.forEach(line => {
     const f = line.filId ? filaments.find(x=>x.id==line.filId) : null;
     const pricePerKg = f ? f.precoKg : 100;
@@ -1013,7 +1069,6 @@ function calc() {
   document.getElementById('r1').textContent = fmt(r1unit);
   document.getElementById('r2').textContent = fmt(r2unit);
   document.getElementById('r3').textContent = fmt(r3unit);
-  document.getElementById('r4').textContent = fmt(r4unit);
 
   // Breakdown (total when qty > 1)
   document.getElementById('b1').textContent = qtd > 1 ? `${fmt(r1unit)} × ${qtd} = ${fmt(r1)}` : fmt(r1);
@@ -1057,7 +1112,7 @@ function saveProduct() {
   const link = document.getElementById('c-link').value.trim();
   const cliente = document.getElementById('c-cliente').value.trim();
   const qtd = parseInt(g('c-qtd')) || 1;
-  const desp = g('c-desperdicio-global');
+  const desp = g('cfg-desperdicio');
 
   // Build filaments snapshot
   const filsUsados = filLines.map(line => {
@@ -1898,6 +1953,7 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 });
 
 // ═══ INIT ═══
+loadConfig();
 renderFilLines();
 calc();
 updateExportSummary();

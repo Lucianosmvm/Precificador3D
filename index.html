@@ -732,19 +732,23 @@ html, body { max-width: 100%; overflow-x: hidden; }
         </div>
       </div>
 
-      <!-- Search & filter bar -->
-      <div style="display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
-        <div style="flex:1;min-width:200px;position:relative">
-          <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:15px">🔍</span>
-          <input type="text" id="prod-search" placeholder="Buscar por nome, cliente ou filamento..." oninput="renderProducts()"
-            style="width:100%;height:38px;padding:0 10px 0 34px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:inherit;font-size:14px;color:var(--text)">
-        </div>
-        <select id="prod-filter" onchange="renderProducts()"
-          style="height:38px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:inherit;font-size:14px;color:var(--text);min-width:150px">
-          <option value="all">Todos</option>
-          <option value="orcamento">⏳ Orçamentos</option>
-          <option value="impresso">✅ Impressos</option>
-        </select>
+      <!-- Abas -->
+      <div style="display:flex;gap:2px;margin-bottom:1rem;border-bottom:2px solid var(--border)">
+        <button id="tab-orcamento" onclick="setProductTab('orcamento')"
+          style="background:none;border:none;padding:9px 18px;font-size:14px;font-weight:600;cursor:pointer;border-bottom:2px solid var(--purple);margin-bottom:-2px;color:var(--purple)">
+          ⏳ Orçamentos <span id="tab-badge-orcamento" style="background:var(--amber-light);color:var(--amber);border-radius:10px;font-size:11px;font-weight:700;padding:1px 7px;margin-left:4px"></span>
+        </button>
+        <button id="tab-impresso" onclick="setProductTab('impresso')"
+          style="background:none;border:none;padding:9px 18px;font-size:14px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--text3)">
+          ✅ Impressos <span id="tab-badge-impresso" style="background:var(--green-light);color:var(--green);border-radius:10px;font-size:11px;font-weight:700;padding:1px 7px;margin-left:4px"></span>
+        </button>
+      </div>
+
+      <!-- Search bar -->
+      <div style="position:relative;margin-bottom:1rem">
+        <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:15px">🔍</span>
+        <input type="text" id="prod-search" placeholder="Buscar por nome, cliente ou filamento..." oninput="renderProducts()"
+          style="width:100%;height:38px;padding:0 10px 0 34px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:inherit;font-size:14px;color:var(--text);box-sizing:border-box">
       </div>
 
       <div id="products-list" class="products-list"></div>
@@ -1246,63 +1250,75 @@ function saveProduct() {
 }
 
 // ═══ RENDER PRODUCTS ═══
+let productTab = 'orcamento';
+
+function setProductTab(tab) {
+  productTab = tab;
+  const tabs = ['orcamento','impresso'];
+  tabs.forEach(t => {
+    const btn = document.getElementById('tab-'+t);
+    if(!btn) return;
+    const isActive = t === tab;
+    btn.style.color = isActive ? 'var(--purple)' : 'var(--text3)';
+    btn.style.borderBottomColor = isActive ? 'var(--purple)' : 'transparent';
+  });
+  renderProducts();
+}
+
 function renderProducts() {
   const list = document.getElementById('products-list');
-  if(!products.length) {
-    list.innerHTML = `<div class="empty"><div class="empty-icon">📦</div><p>Nenhum produto salvo ainda.<br>Precifique um modelo e clique em "Salvar produto".</p></div>`;
-    document.getElementById('ps-total').textContent = '0';
-    document.getElementById('ps-receita').textContent = 'R$ 0';
-    document.getElementById('ps-lucro').textContent = 'R$ 0';
-    document.getElementById('ps-fil').textContent = '0 g';
-    return;
-  }
 
-  const totReceita = products.reduce((a,p) => a + p.preco * p.qtd, 0);
-  const totLucro = products.reduce((a,p) => a + p.lucroLiq, 0);
-  const totFil = products.filter(p=>p.impresso).reduce((a,p) => a + (p.pesoUsado||0), 0);
-  const totOrcamentos = products.filter(p=>!p.impresso).length;
+  const orcamentos = products.filter(p => !p.impresso);
+  const impressos  = products.filter(p => p.impresso);
 
-  document.getElementById('ps-total').textContent = products.length;
+  // Update tab badges
+  const badgeOrc = document.getElementById('tab-badge-orcamento');
+  const badgeImp = document.getElementById('tab-badge-impresso');
+  if(badgeOrc) badgeOrc.textContent = orcamentos.length;
+  if(badgeImp) badgeImp.textContent = impressos.length;
+
+  // Update stats cards (always reflect the active tab)
+  const tabProducts = productTab === 'orcamento' ? orcamentos : impressos;
+  const totReceita = tabProducts.reduce((a,p) => a + p.preco * p.qtd, 0);
+  const totLucro   = tabProducts.reduce((a,p) => a + p.lucroLiq, 0);
+  const totFil     = impressos.reduce((a,p) => a + (p.pesoUsado||0), 0);
+  document.getElementById('ps-total').textContent = tabProducts.length;
   document.getElementById('ps-receita').textContent = fmt(totReceita);
   document.getElementById('ps-lucro').textContent = fmt(totLucro);
   document.getElementById('ps-fil').textContent = (totFil/1000).toFixed(2) + ' kg';
 
-  // Search & filter
-  const search = (document.getElementById('prod-search')?.value || '').toLowerCase();
-  const filter = document.getElementById('prod-filter')?.value || 'all';
+  const emptyMsg = productTab === 'orcamento'
+    ? `<div class="empty"><div class="empty-icon">⏳</div><p>Nenhum orçamento pendente.<br>Precifique um modelo e clique em "Salvar produto".</p></div>`
+    : `<div class="empty"><div class="empty-icon">🖨️</div><p>Nenhuma peça impressa ainda.<br>Clique em "Imprimir" nos orçamentos quando produzir.</p></div>`;
 
-  let visible = products.filter(p => {
-    if(filter === 'orcamento' && p.impresso) return false;
-    if(filter === 'impresso' && !p.impresso) return false;
-    if(search) {
-      const haystack = [p.nome, p.cliente, p.filamentoNome, p.data].filter(Boolean).join(' ').toLowerCase();
-      if(!haystack.includes(search)) return false;
-    }
-    return true;
+  if(!tabProducts.length) { list.innerHTML = emptyMsg; return; }
+
+  // Search filter
+  const search = (document.getElementById('prod-search')?.value || '').toLowerCase();
+  let visible = tabProducts.filter(p => {
+    if(!search) return true;
+    const haystack = [p.nome, p.cliente, p.filamentoNome, p.data].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(search);
   });
 
   if(!visible.length) {
-    list.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><p>Nenhum produto encontrado.<br><span style="font-size:12px;color:var(--text3)">Tente outro termo ou filtro.</span></p></div>`;
+    list.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><p>Nenhum produto encontrado.<br><span style="font-size:12px;color:var(--text3)">Tente outro termo de busca.</span></p></div>`;
     return;
   }
 
   list.innerHTML = visible.map(p => {
-    const statusBadge = p.impresso
-      ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;background:var(--green-light);color:var(--green)">✅ Impresso</span>`
-      : `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;background:var(--amber-light);color:var(--amber)">⏳ Orçamento</span>`;
     const printBtn = !p.impresso
       ? `<button class="btn btn-primary btn-sm" onclick="markPrinted(${p.id})" title="Confirmar impressão e descontar estoque">🖨️ Imprimir</button>`
-      : `<button class="btn btn-outline btn-sm" disabled style="opacity:0.4;cursor:default">🖨️ Impresso</button>`;
+      : '';
     const iconContent = p.foto
       ? `<img src="${p.foto}" alt="${p.nome}">`
       : p.emoji;
     return `
-    <div class="product-card" style="${p.impresso ? '' : 'border-left: 3px solid var(--amber);'}">
+    <div class="product-card">
       <div class="pc-icon">${iconContent}</div>
       <div class="pc-info">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
           <div class="pc-name" style="margin-bottom:0">${p.nome}</div>
-          ${statusBadge}
         </div>
         <div class="pc-meta">
           ${p.cliente ? `<span style="color:var(--purple);font-weight:500">👤 ${p.cliente}</span>` : ''}

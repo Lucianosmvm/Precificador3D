@@ -1693,15 +1693,22 @@ function importData(mode) {
 }
 
 // ═══ DASHBOARD ═══
+let dashYear = null;
+let dashMonth = null;
+
 function renderDashboard() {
   const root = document.getElementById('dash-root');
   const now = new Date();
-  const curYear = now.getFullYear();
-  const curMonth = now.getMonth();
+
+  // Initialize to current month on first call
+  if(dashYear === null) { dashYear = now.getFullYear(); dashMonth = now.getMonth(); }
+
+  const curYear = dashYear;
+  const curMonth = dashMonth;
+  const isCurrentMonth = dashYear === now.getFullYear() && dashMonth === now.getMonth();
 
   // Parse product date "dd/mm/yyyy" → Date
   function parseDate(p) {
-    // prefer dataImpressao for printed, else data
     const str = p.impresso && p.dataImpressao ? p.dataImpressao : p.data;
     if(!str) return null;
     const [d,m,y] = str.split('/');
@@ -1711,14 +1718,14 @@ function renderDashboard() {
   // Filter printed products only for financial metrics
   const printed = products.filter(p => p.impresso);
 
-  // Current month printed
+  // Selected month printed
   const thisMonth = printed.filter(p => {
     const d = parseDate(p); return d && d.getFullYear()===curYear && d.getMonth()===curMonth;
   });
-  // Last month
-  const lastMonthDate = new Date(curYear, curMonth-1, 1);
+  // Previous month (for delta comparison)
+  const prevDate = new Date(curYear, curMonth-1, 1);
   const lastMonth = printed.filter(p => {
-    const d = parseDate(p); return d && d.getFullYear()===lastMonthDate.getFullYear() && d.getMonth()===lastMonthDate.getMonth();
+    const d = parseDate(p); return d && d.getFullYear()===prevDate.getFullYear() && d.getMonth()===prevDate.getMonth();
   });
 
   const sum = (arr, fn) => arr.reduce((a,p) => a + fn(p), 0);
@@ -1741,7 +1748,7 @@ function renderDashboard() {
   // Pending budgets
   const pendentes = products.filter(p => !p.impresso).length;
 
-  // Last 6 months bars
+  // 6 months centered on selected month
   const months6 = [];
   for(let i = 5; i >= 0; i--) {
     const d = new Date(curYear, curMonth - i, 1);
@@ -1752,14 +1759,14 @@ function renderDashboard() {
   }
   const maxVal = Math.max(...months6.map(m => m.receita), 1);
 
-  // Top 5 products by lucro
-  const topProds = [...printed]
+  // Top 5 products by lucro (selected month)
+  const topProds = [...thisMonth]
     .sort((a,b) => b.lucroLiq - a.lucroLiq)
     .slice(0, 5);
 
-  // Filament usage by material
+  // Filament usage by material (selected month)
   const filUsage = {};
-  printed.forEach(p => {
+  thisMonth.forEach(p => {
     const key = p.filamentoNome || 'Sem filamento';
     const color = p.filamentoColor || '#95A5A6';
     if(!filUsage[key]) filUsage[key] = { peso: 0, color };
@@ -1769,15 +1776,29 @@ function renderDashboard() {
   const totalFilPeso = filEntries.reduce((a,[,v])=>a+v.peso,0);
 
   // Month name
-  const mesAtual = now.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  const selectedDate = new Date(curYear, curMonth, 1);
+  const mesAtual = selectedDate.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+
+  // Check if there's a next month to navigate to (can't go beyond current month)
+  const maxDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  const selDate = new Date(curYear, curMonth, 1);
+  const canGoNext = selDate < maxDate;
 
   root.innerHTML = `
     <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
       <div>
         <h2>Dashboard</h2>
-        <p>Resultados de ${mesAtual}</p>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <button onclick="dashNavMonth(-1)" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;color:var(--text2)">‹</button>
+          <span style="font-size:14px;color:var(--text2);min-width:160px;text-align:center;text-transform:capitalize">${mesAtual}</span>
+          <button onclick="dashNavMonth(1)" ${canGoNext?'':'disabled'} style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;color:var(--text2);${canGoNext?'':'opacity:0.35;cursor:default'}">›</button>
+          ${!isCurrentMonth ? `<button onclick="dashGoToday()" style="background:var(--purple-light);border:1px solid #C9BFF0;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:600;color:var(--purple)">Hoje</button>` : ''}
+        </div>
       </div>
-      ${pendentes > 0 ? `<div style="background:var(--amber-light);border:1px solid #F5D5A0;border-radius:var(--radius);padding:7px 12px;font-size:13px;color:var(--amber);display:flex;align-items:center;gap:6px">⏳ <b>${pendentes}</b> orçamento${pendentes>1?'s':''} pendente${pendentes>1?'s':''}</div>` : ''}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <button onclick="exportDashboardCSV()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:7px 14px;cursor:pointer;font-size:13px;font-weight:500;color:var(--text2);display:flex;align-items:center;gap:6px">📊 Exportar planilha</button>
+        ${pendentes > 0 ? `<div style="background:var(--amber-light);border:1px solid #F5D5A0;border-radius:var(--radius);padding:7px 12px;font-size:13px;color:var(--amber);display:flex;align-items:center;gap:6px">⏳ <b>${pendentes}</b> orçamento${pendentes>1?'s':''} pendente${pendentes>1?'s':''}</div>` : ''}
+      </div>
     </div>
 
     <!-- KPI cards -->
@@ -1794,7 +1815,7 @@ function renderDashboard() {
       <!-- Bar chart -->
       <div class="card">
         <div style="font-size:14px;font-weight:600;margin-bottom:1.25rem;display:flex;justify-content:space-between;align-items:center">
-          <span>Últimos 6 meses</span>
+          <span>6 meses anteriores</span>
           <div style="display:flex;gap:12px;font-size:11px;font-weight:500">
             <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--purple);display:inline-block"></span>Receita</span>
             <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--green);display:inline-block"></span>Lucro</span>
@@ -1804,13 +1825,13 @@ function renderDashboard() {
           ${months6.map((m,i) => {
             const hR = maxVal > 0 ? (m.receita/maxVal)*110 : 0;
             const hL = maxVal > 0 ? (m.lucro/maxVal)*110 : 0;
-            const isNow = i === 5;
+            const isSelected = i === 5;
             return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative">
               <div style="display:flex;align-items:flex-end;gap:2px;height:110px">
-                <div style="width:14px;height:${Math.max(2,hR)}px;background:${isNow?'var(--purple)':'#C9BFF0'};border-radius:3px 3px 0 0;transition:height 0.4s" title="Receita: ${fmt(m.receita)}"></div>
-                <div style="width:14px;height:${Math.max(2,hL)}px;background:${isNow?'var(--green)':'#A8D5BC'};border-radius:3px 3px 0 0;transition:height 0.4s" title="Lucro: ${fmt(m.lucro)}"></div>
+                <div style="width:14px;height:${Math.max(2,hR)}px;background:${isSelected?'var(--purple)':'#C9BFF0'};border-radius:3px 3px 0 0;transition:height 0.4s" title="Receita: ${fmt(m.receita)}"></div>
+                <div style="width:14px;height:${Math.max(2,hL)}px;background:${isSelected?'var(--green)':'#A8D5BC'};border-radius:3px 3px 0 0;transition:height 0.4s" title="Lucro: ${fmt(m.lucro)}"></div>
               </div>
-              <div style="font-size:10px;color:${isNow?'var(--purple)':'var(--text3)'};font-weight:${isNow?600:400};position:absolute;bottom:-20px;text-transform:capitalize">${m.nome}</div>
+              <div style="font-size:10px;color:${isSelected?'var(--purple)':'var(--text3)'};font-weight:${isSelected?600:400};position:absolute;bottom:-20px;text-transform:capitalize">${m.nome}</div>
               ${m.count>0?`<div style="font-size:9px;color:var(--text3);position:absolute;bottom:-32px">${m.count}x</div>`:''}
             </div>`;
           }).join('')}
@@ -1820,7 +1841,7 @@ function renderDashboard() {
       <!-- Filament usage -->
       <div class="card">
         <div style="font-size:14px;font-weight:600;margin-bottom:1.25rem">Filamento consumido</div>
-        ${filEntries.length === 0 ? `<div style="text-align:center;padding:2rem 0;color:var(--text3);font-size:13px">Nenhuma peça impressa ainda</div>` :
+        ${filEntries.length === 0 ? `<div style="text-align:center;padding:2rem 0;color:var(--text3);font-size:13px">Nenhuma peça impressa neste mês</div>` :
           filEntries.map(([nome, val]) => {
             const pct = totalFilPeso > 0 ? (val.peso/totalFilPeso*100) : 0;
             return `<div style="margin-bottom:10px">
@@ -1843,8 +1864,8 @@ function renderDashboard() {
 
     <!-- Top products -->
     <div class="card">
-      <div style="font-size:14px;font-weight:600;margin-bottom:1.25rem">🏆 Produtos mais lucrativos (todos os tempos)</div>
-      ${topProds.length === 0 ? `<div style="text-align:center;padding:1.5rem 0;color:var(--text3);font-size:13px">Imprima alguns produtos para ver o ranking</div>` :
+      <div style="font-size:14px;font-weight:600;margin-bottom:1.25rem">🏆 Produtos mais lucrativos ${isCurrentMonth ? '(mês atual)' : '(' + selectedDate.toLocaleDateString('pt-BR',{month:'long'}) + ')'}</div>
+      ${topProds.length === 0 ? `<div style="text-align:center;padding:1.5rem 0;color:var(--text3);font-size:13px">Nenhuma peça impressa neste mês</div>` :
         `<div style="display:flex;flex-direction:column;gap:0">
           ${topProds.map((p,i) => {
             const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
@@ -1869,6 +1890,85 @@ function renderDashboard() {
       }
     </div>
   `;
+}
+
+function dashNavMonth(dir) {
+  const d = new Date(dashYear, dashMonth + dir, 1);
+  const now = new Date();
+  // Don't go beyond current month
+  if(d > new Date(now.getFullYear(), now.getMonth(), 1)) return;
+  dashYear = d.getFullYear();
+  dashMonth = d.getMonth();
+  renderDashboard();
+}
+
+function dashGoToday() {
+  const now = new Date();
+  dashYear = now.getFullYear();
+  dashMonth = now.getMonth();
+  renderDashboard();
+}
+
+function exportDashboardCSV() {
+  function parseDate(p) {
+    const str = p.impresso && p.dataImpressao ? p.dataImpressao : p.data;
+    if(!str) return null;
+    const [d,m,y] = str.split('/');
+    return new Date(+y, +m-1, +d);
+  }
+
+  const printed = products.filter(p => p.impresso);
+  const monthData = printed.filter(p => {
+    const d = parseDate(p);
+    return d && d.getFullYear()===dashYear && d.getMonth()===dashMonth;
+  });
+
+  const selectedDate = new Date(dashYear, dashMonth, 1);
+  const mesNome = selectedDate.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}).replace(' de ',' ');
+
+  const headers = ['Produto','Cliente','Filamento','Qtd','Peso (g)','Custo (R$)','Preço de Venda (R$)','Lucro Líquido (R$)','Margem (%)','Horas de Impressão','Data de Impressão'];
+
+  const rows = monthData.map(p => {
+    const receita = p.preco * p.qtd;
+    const margem = receita > 0 ? (p.lucroLiq / receita * 100).toFixed(1) : '0';
+    return [
+      p.nome || '',
+      p.cliente || '',
+      p.filamentoNome || '',
+      p.qtd || 1,
+      (p.pesoUsado || 0).toFixed(0),
+      (p.custoTotal || 0).toFixed(2).replace('.',','),
+      (receita).toFixed(2).replace('.',','),
+      (p.lucroLiq || 0).toFixed(2).replace('.',','),
+      margem.replace('.',','),
+      p.horas || 0,
+      p.dataImpressao || p.data || ''
+    ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(';');
+  });
+
+  // Summary footer
+  const sum = (fn) => monthData.reduce((a,p) => a + fn(p), 0);
+  const totReceita = sum(p => p.preco * p.qtd);
+  const totCusto   = sum(p => p.custoTotal);
+  const totLucro   = sum(p => p.lucroLiq);
+  const totMargem  = totReceita > 0 ? (totLucro / totReceita * 100).toFixed(1) : '0';
+  rows.push('');
+  rows.push(['"TOTAL"','','',monthData.length,'',
+    `"${totCusto.toFixed(2).replace('.',',')}"`,
+    `"${totReceita.toFixed(2).replace('.',',')}"`,
+    `"${totLucro.toFixed(2).replace('.',',')}"`,
+    `"${totMargem.replace('.',',')}"`,'',''
+  ].join(';'));
+
+  const bom = '﻿';
+  const csv = bom + [headers.map(h=>`"${h}"`).join(';'), ...rows].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `dashboard-${mesNome.replace(/\s/g,'-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function kpiCard(label, value, delta, deltaCol, icon, iconBg, sub) {

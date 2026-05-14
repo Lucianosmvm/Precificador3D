@@ -436,6 +436,10 @@ html, body { max-width: 100%; overflow-x: hidden; }
       <div class="nav-item" onclick="goTo('stock')" id="nav-stock">
         <span class="nav-icon">🎨</span> Estoque
       </div>
+      <div class="nav-item" onclick="goTo('requests')" id="nav-requests">
+        <span class="nav-icon">📋</span> Solicitações
+        <span id="nav-requests-badge" style="display:none;background:var(--purple);color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:auto"></span>
+      </div>
       <div class="nav-item" onclick="goTo('backup')" id="nav-backup">
         <span class="nav-icon">💾</span> Backup
       </div>
@@ -459,6 +463,10 @@ html, body { max-width: 100%; overflow-x: hidden; }
     <div class="mobile-nav-item" onclick="goTo('stock')" id="mnav-stock">
       <span class="mobile-nav-icon">🎨</span> Estoque
     </div>
+    <div class="mobile-nav-item" onclick="goTo('requests')" id="mnav-requests" style="position:relative">
+      <span class="mobile-nav-icon">📋</span> Pedidos
+      <span id="mnav-requests-badge" style="display:none;position:absolute;top:4px;right:4px;background:var(--purple);color:#fff;border-radius:10px;font-size:9px;font-weight:700;padding:0 5px"></span>
+    </div>
     <div class="mobile-nav-item" onclick="goTo('backup')" id="mnav-backup">
       <span class="mobile-nav-icon">💾</span> Backup
     </div>
@@ -472,6 +480,64 @@ html, body { max-width: 100%; overflow-x: hidden; }
     <div class="page active" id="page-dash">
       <!-- Dashboard content injected by JS -->
       <div id="dash-root"></div>
+    </div>
+
+    <!-- ══ PAGE: SOLICITAÇÕES ══ -->
+    <div class="page" id="page-requests">
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+        <div>
+          <h2>Solicitações</h2>
+          <p>Pedidos recebidos aguardando orçamento</p>
+        </div>
+        <button class="btn btn-primary" onclick="openRequestModal()">+ Nova solicitação</button>
+      </div>
+      <div id="requests-list"></div>
+    </div>
+
+    <!-- Modal: Nova/Editar Solicitação -->
+    <div id="request-modal-overlay" onclick="if(event.target===this)closeRequestModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;display:none;align-items:center;justify-content:center;padding:16px">
+      <div style="background:var(--surface);border-radius:var(--radius-lg);padding:24px;width:100%;max-width:480px;box-shadow:0 8px 40px rgba(0,0,0,0.18)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <h3 id="request-modal-title" style="font-size:16px;font-weight:600">Nova solicitação</h3>
+          <button onclick="closeRequestModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text3);line-height:1">×</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="field">
+            <label>Produto / modelo <span style="color:var(--red)">*</span></label>
+            <input type="text" id="req-produto" placeholder="Ex: Busto Grogu, Suporte fone...">
+          </div>
+          <div class="field">
+            <label>Cliente <span style="color:var(--red)">*</span></label>
+            <input type="text" id="req-cliente" placeholder="Nome do cliente ou loja...">
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Quantidade</label>
+              <input type="number" id="req-qtd" value="1" min="1" step="1">
+            </div>
+            <div class="field">
+              <label>Prioridade</label>
+              <select id="req-prioridade" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-size:14px">
+                <option value="normal">Normal</option>
+                <option value="alta">Alta</option>
+                <option value="urgente">Urgente</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Link do arquivo 3D (opcional)</label>
+            <input type="url" id="req-link" placeholder="https://www.thingiverse.com/thing:...">
+          </div>
+          <div class="field">
+            <label>Observações (opcional)</label>
+            <textarea id="req-obs" placeholder="Cor, material específico, prazo, etc..." rows="2" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-size:14px;resize:vertical;font-family:inherit"></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end">
+          <button class="btn btn-outline" onclick="closeRequestModal()">Cancelar</button>
+          <button class="btn btn-primary" onclick="saveRequest()">Salvar solicitação</button>
+        </div>
+      </div>
     </div>
 
     <!-- ══ PAGE: CALCULADORA ══ -->
@@ -948,13 +1014,30 @@ const COLOR_NAMES = ['Vermelho','Laranja','Amarelo','Verde','Teal','Azul','Roxo'
 
 let filaments = JSON.parse(localStorage.getItem('p3d_filaments') || '[]');
 let products = JSON.parse(localStorage.getItem('p3d_products') || '[]');
+let requests = JSON.parse(localStorage.getItem('p3d_requests') || '[]');
 let selectedColor = COLORS[9];
 let editingFilamentId = null;
 let deleteTarget = null;
+let editingRequestId = null;
 
 function save() {
   localStorage.setItem('p3d_filaments', JSON.stringify(filaments));
   localStorage.setItem('p3d_products', JSON.stringify(products));
+}
+
+function saveRequests() {
+  localStorage.setItem('p3d_requests', JSON.stringify(requests));
+  updateRequestsBadge();
+}
+
+function updateRequestsBadge() {
+  const pending = requests.filter(r => r.status === 'pendente').length;
+  ['nav-requests-badge','mnav-requests-badge'].forEach(id => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.style.display = pending > 0 ? 'inline-block' : 'none';
+    el.textContent = pending;
+  });
 }
 
 // ═══ CONFIGURAÇÕES ═══
@@ -988,7 +1071,7 @@ function saveConfig() {
 }
 
 // ═══ NAVIGATION ═══
-const pages = ['dash','calc','products','stock','backup','config'];
+const pages = ['dash','calc','products','stock','requests','backup','config'];
 
 function goTo(page) {
   pages.forEach(p => {
@@ -1003,6 +1086,7 @@ function goTo(page) {
   if(page === 'stock') renderFilaments();
   if(page === 'calc') refreshFilamentSelect();
   if(page === 'backup') updateExportSummary();
+  if(page === 'requests') renderRequests();
 }
 
 // ═══ CALCULATOR ═══
@@ -1632,7 +1716,8 @@ function exportData() {
     version: 1,
     exportedAt: new Date().toISOString(),
     filaments,
-    products
+    products,
+    requests
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
@@ -1655,7 +1740,8 @@ function previewImport(e) {
       importBuffer = data;
       const prev = document.getElementById('import-preview');
       prev.style.display = 'block';
-      prev.innerHTML = `<b>Arquivo reconhecido</b><br>${data.filaments.length} filamento(s) · ${data.products.length} produto(s)<br><span style="color:var(--text3)">Exportado em: ${data.exportedAt ? new Date(data.exportedAt).toLocaleString('pt-BR') : '—'}</span>`;
+      const reqCount = data.requests ? data.requests.length : 0;
+      prev.innerHTML = `<b>Arquivo reconhecido</b><br>${data.filaments.length} filamento(s) · ${data.products.length} produto(s)${reqCount>0?' · '+reqCount+' solicitação(ões)':''}<br><span style="color:var(--text3)">Exportado em: ${data.exportedAt ? new Date(data.exportedAt).toLocaleString('pt-BR') : '—'}</span>`;
       const actions = document.getElementById('import-actions');
       actions.style.display = 'flex';
     } catch(err) {
@@ -1672,10 +1758,16 @@ function importData(mode) {
     if(!confirm('Isso vai substituir TODOS os dados atuais pelo arquivo importado. Tem certeza?')) return;
     filaments = importBuffer.filaments;
     products = importBuffer.products;
+    requests = importBuffer.requests || [];
   } else {
     // Merge: skip duplicates by id
     const existFilIds = new Set(filaments.map(x=>x.id));
     const existProdIds = new Set(products.map(x=>x.id));
+    const existReqIds = new Set(requests.map(x=>x.id));
+    if(importBuffer.requests) {
+      const newReqs = importBuffer.requests.filter(x=>!existReqIds.has(x.id));
+      requests = [...newReqs, ...requests];
+    }
     const newFil = importBuffer.filaments.filter(x=>!existFilIds.has(x.id));
     const newProd = importBuffer.products.filter(x=>!existProdIds.has(x.id));
     filaments = [...filaments, ...newFil];
@@ -1683,6 +1775,7 @@ function importData(mode) {
     alert(`Mesclado! Adicionados: ${newFil.length} filamento(s) e ${newProd.length} produto(s).`);
   }
   save();
+  saveRequests();
   importBuffer = null;
   document.getElementById('import-file').value = '';
   document.getElementById('import-preview').style.display = 'none';
@@ -1690,6 +1783,162 @@ function importData(mode) {
   updateExportSummary();
   refreshFilamentSelect();
   if(mode === 'replace') alert('Dados restaurados com sucesso!');
+}
+
+// ═══ SOLICITAÇÕES ═══
+function openRequestModal(id) {
+  editingRequestId = id || null;
+  const modal = document.getElementById('request-modal-overlay');
+  modal.style.display = 'flex';
+
+  if(id) {
+    const req = requests.find(r => r.id === id);
+    if(!req) return;
+    document.getElementById('request-modal-title').textContent = 'Editar solicitação';
+    document.getElementById('req-produto').value = req.produto;
+    document.getElementById('req-cliente').value = req.cliente;
+    document.getElementById('req-qtd').value = req.qtd;
+    document.getElementById('req-prioridade').value = req.prioridade;
+    document.getElementById('req-link').value = req.link || '';
+    document.getElementById('req-obs').value = req.obs || '';
+  } else {
+    document.getElementById('request-modal-title').textContent = 'Nova solicitação';
+    document.getElementById('req-produto').value = '';
+    document.getElementById('req-cliente').value = '';
+    document.getElementById('req-qtd').value = '1';
+    document.getElementById('req-prioridade').value = 'normal';
+    document.getElementById('req-link').value = '';
+    document.getElementById('req-obs').value = '';
+  }
+  setTimeout(() => document.getElementById('req-produto').focus(), 50);
+}
+
+function closeRequestModal() {
+  document.getElementById('request-modal-overlay').style.display = 'none';
+  editingRequestId = null;
+}
+
+function saveRequest() {
+  const produto = document.getElementById('req-produto').value.trim();
+  const cliente = document.getElementById('req-cliente').value.trim();
+  if(!produto) { alert('Digite o nome do produto.'); document.getElementById('req-produto').focus(); return; }
+  if(!cliente) { alert('Digite o nome do cliente.'); document.getElementById('req-cliente').focus(); return; }
+
+  const data = {
+    produto,
+    cliente,
+    qtd: parseInt(document.getElementById('req-qtd').value) || 1,
+    prioridade: document.getElementById('req-prioridade').value,
+    link: document.getElementById('req-link').value.trim() || null,
+    obs: document.getElementById('req-obs').value.trim() || null,
+  };
+
+  if(editingRequestId) {
+    const idx = requests.findIndex(r => r.id === editingRequestId);
+    if(idx !== -1) requests[idx] = { ...requests[idx], ...data };
+  } else {
+    requests.unshift({ id: Date.now(), status: 'pendente', dataCriacao: new Date().toLocaleDateString('pt-BR'), ...data });
+  }
+
+  saveRequests();
+  closeRequestModal();
+  renderRequests();
+}
+
+function deleteRequest(id) {
+  if(!confirm('Remover esta solicitação?')) return;
+  requests = requests.filter(r => r.id !== id);
+  saveRequests();
+  renderRequests();
+}
+
+function markRequestDone(id) {
+  const req = requests.find(r => r.id === id);
+  if(req) { req.status = req.status === 'concluido' ? 'pendente' : 'concluido'; }
+  saveRequests();
+  renderRequests();
+}
+
+function orcamentarRequest(id) {
+  const req = requests.find(r => r.id === id);
+  if(!req) return;
+  goTo('calc');
+  document.getElementById('c-nome').value = req.produto;
+  document.getElementById('c-cliente').value = req.cliente;
+  document.getElementById('c-qtd').value = req.qtd;
+  document.getElementById('c-link').value = req.link || '';
+  // highlight the fields briefly
+  ['c-nome','c-cliente','c-qtd'].forEach(fid => {
+    const el = document.getElementById(fid);
+    el.style.outline = '2px solid var(--purple)';
+    setTimeout(() => { el.style.outline = ''; }, 1800);
+  });
+  calc();
+  // scroll results into view
+  setTimeout(() => document.querySelector('.results-panel')?.scrollIntoView({ behavior:'smooth', block:'center' }), 200);
+}
+
+function renderRequests() {
+  const list = document.getElementById('requests-list');
+  if(!list) return;
+
+  const pendentes = requests.filter(r => r.status === 'pendente');
+  const concluidos = requests.filter(r => r.status === 'concluido');
+
+  const prioColors = { normal: 'var(--text3)', alta: 'var(--amber)', urgente: 'var(--red)' };
+  const prioLabels = { normal: 'Normal', alta: '⚡ Alta', urgente: '🔴 Urgente' };
+  const prioCardBorder = { normal: 'var(--border)', alta: '#F5D5A0', urgente: '#F5BCBC' };
+  const prioCardBg = { normal: '', alta: '#FFFBF2', urgente: '#FFF5F5' };
+
+  function cardHTML(req) {
+    const isDark = document.body.classList.contains('dark');
+    const borderColor = prioCardBorder[req.prioridade];
+    const bgColor = req.status === 'concluido' ? '' : (isDark ? '' : prioCardBg[req.prioridade]);
+    return `
+      <div style="border:1px solid ${req.status==='concluido'?'var(--border)':borderColor};border-radius:var(--radius-lg);padding:16px;background:${bgColor||'var(--surface)'};transition:opacity 0.2s;${req.status==='concluido'?'opacity:0.55':''}">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <input type="checkbox" ${req.status==='concluido'?'checked':''} onchange="markRequestDone(${req.id})"
+            style="width:17px;height:17px;margin-top:2px;cursor:pointer;accent-color:var(--purple);flex-shrink:0">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+              <span style="font-size:14px;font-weight:600;${req.status==='concluido'?'text-decoration:line-through;color:var(--text3)':''}">${req.produto}</span>
+              <span style="font-size:11px;font-weight:600;color:${prioColors[req.prioridade]}">${prioLabels[req.prioridade]}</span>
+            </div>
+            <div style="font-size:13px;color:var(--text2);margin-bottom:${req.obs||req.link?'8px':'0'}">
+              👤 ${req.cliente} &nbsp;·&nbsp; Qtd: <b>${req.qtd}</b> &nbsp;·&nbsp; <span style="color:var(--text3);font-size:12px">${req.dataCriacao}</span>
+            </div>
+            ${req.obs ? `<div style="font-size:12px;color:var(--text3);background:var(--surface2);border-radius:6px;padding:6px 8px;margin-bottom:${req.link?'6px':'0'}">${req.obs}</div>` : ''}
+            ${req.link ? `<div style="font-size:12px"><a href="${req.link}" target="_blank" rel="noopener" style="color:var(--purple);text-decoration:none;word-break:break-all">🔗 ${req.link}</a></div>` : ''}
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            ${req.status === 'pendente' ? `<button onclick="orcamentarRequest(${req.id})" style="background:var(--purple);color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap">🧮 Orçar</button>` : ''}
+            <button onclick="openRequestModal(${req.id})" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px" title="Editar">✏️</button>
+            <button onclick="deleteRequest(${req.id})" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;cursor:pointer;font-size:13px" title="Remover">🗑️</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  let html = '';
+
+  if(pendentes.length === 0 && concluidos.length === 0) {
+    html = `<div class="empty"><div class="empty-icon">📋</div><p>Nenhuma solicitação ainda.<br>Clique em <b>+ Nova solicitação</b> para registrar um pedido recebido.</p></div>`;
+  } else {
+    if(pendentes.length > 0) {
+      html += `<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">${pendentes.length} pendente${pendentes.length!==1?'s':''}</div>`;
+      html += `<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:${concluidos.length>0?'24px':'0'}">`;
+      html += pendentes.map(cardHTML).join('');
+      html += '</div>';
+    }
+    if(concluidos.length > 0) {
+      html += `<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">${concluidos.length} concluída${concluidos.length!==1?'s':''}</div>`;
+      html += `<div style="display:flex;flex-direction:column;gap:10px">`;
+      html += concluidos.map(cardHTML).join('');
+      html += '</div>';
+    }
+  }
+
+  list.innerHTML = html;
 }
 
 // ═══ DASHBOARD ═══
@@ -2057,6 +2306,7 @@ loadConfig();
 renderFilLines();
 calc();
 updateExportSummary();
+updateRequestsBadge();
 renderDashboard();
 </script>
 </body>
